@@ -1,0 +1,10 @@
+{
+    "C_Cpp.default.compilerPath": "/usr/bin/avr-gcc",
+    "C_Cpp.default.compilerArgs": [
+        "-mmcu=atmega48a"
+    ],
+    "files.associations": {
+        "delay.h": "c",
+        "io.h": "c"
+    }
+}
