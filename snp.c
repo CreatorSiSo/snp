@@ -73,10 +73,21 @@ void display(uint16_t bits) {
   PORTB |= (extract_bit(bits, 10) << PB0);
 }
 
+void setup_buttons() {
+  // Enable external interrupts 0 and 1
+  EIMSK |= (1 << INT0) | (1 << INT1);
+
+  EICRA |= (1 << ISC01) | (1 << ISC11);
+}
+
+ISR(INT0_vect) { /* display(1); */ }
+ISR(INT1_vect) { /* display(0); */ }
+
 int main() {
   setup_pwm();
   setup_clock_timer();
   setup_leds();
+  setup_buttons();
   sei();
 
   while (true) {
