@@ -6,17 +6,60 @@
 #include <stdint.h>
 #include <util/delay.h>
 
+volatile uint16_t millis = 0;
 volatile uint32_t secs = 54420;
+
 volatile enum Mode { Display, Sleep, SetTime } mode = Display;
 
-void set_intensity(uint8_t intensity) {
-  uint8_t inverted = (255 - intensity);
+volatile enum Intensity {
+  VeryLow,
+  Low,
+  Medium,
+  High,
+  VeryHigh
+} intensity = High;
+
+void apply_intensity() {
+  const uint8_t mapping[5] = {32, 64, 128, 192, 255};
+  uint8_t inverted = 255 - mapping[(uint8_t)intensity];
   OCR1A = inverted;
   OCR1B = inverted;
 }
 
-void setup_pwm() {
-  set_intensity(128);
+void increase_intensity() {
+  if (intensity == VeryHigh) {
+    intensity = VeryLow;
+  } else {
+    intensity += 1;
+  }
+  apply_intensity(intensity);
+}
+
+void decrease_intensity() {
+  if (intensity == VeryLow) {
+    intensity = VeryHigh;
+  } else {
+    intensity -= 1;
+  }
+  apply_intensity(intensity);
+}
+
+void setup_timer0_millis() {
+  // prescaler 8
+  TCCR0B |= (1 << CS01);
+
+  // enable ctc
+  TCCR0A |= (1 << WGM01);
+
+  // enable Timer0 compare interrupt A
+  TIMSK0 |= (1 << OCIE0A);
+  OCR0A = 125 - 1;
+}
+
+ISR(TIMER0_COMPA_vect) { millis += 1; }
+
+void setup_timer1_pwm() {
+  apply_intensity(128);
 
   // fast PWM 8-bit
   TCCR1A |= (1 << WGM10);
@@ -31,7 +74,7 @@ void setup_pwm() {
   DDRB |= (1 << PB1) | (1 << PB2);
 }
 
-void setup_clock_timer() {
+void setup_timer2_secs() {
   // prescaler 128
   TCCR2B |= (1 << CS22) | (1 << CS20);
 
@@ -74,18 +117,55 @@ void display(uint16_t bits) {
 }
 
 void setup_buttons() {
-  // Enable external interrupts 0 and 1
+  // enable external interrupts INT0 and INT1
   EIMSK |= (1 << INT0) | (1 << INT1);
 
+  // trigger interrupt on a falling edge
   EICRA |= (1 << ISC01) | (1 << ISC11);
+
+  // enable pin change interrupts PCINT23..16
+  PCICR |= (1 << PCIE2);
+
+  // enable pin change interrupt PCINT20
+  PCMSK2 |= (1 << PCINT20);
+
+  // enable internal pullup resistors
+  PORTD |= (1 << PD2) | (1 << PD3) | (1 << PD4);
 }
 
-ISR(INT0_vect) { /* display(1); */ }
-ISR(INT1_vect) { /* display(0); */ }
+volatile uint16_t last_interrupt_time = 0;
+
+int32_t difference(uint16_t a, uint16_t b) {
+  return (a > b) ? a - b : -(b - a);
+}
+
+bool debounce(uint16_t delay) {
+  bool result = difference(millis, last_interrupt_time) > delay;
+  if (result) {
+    last_interrupt_time = millis;
+  }
+  return result;
+}
+
+ISR(INT0_vect) {
+  if (!debounce(250)) return;
+  display(0);
+}
+
+ISR(INT1_vect) {
+  if (!debounce(250)) return;
+  decrease_intensity();
+}
+
+ISR(PCINT2_vect) {
+  if (!debounce(250)) return;
+  increase_intensity();
+}
 
 int main() {
-  setup_pwm();
-  setup_clock_timer();
+  setup_timer0_millis();
+  setup_timer1_pwm();
+  setup_timer2_secs();
   setup_leds();
   setup_buttons();
   sei();
