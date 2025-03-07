@@ -2,6 +2,7 @@
 
 #include <avr/interrupt.h>
 #include <avr/io.h>
+#include <avr/sleep.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <util/delay.h>
@@ -10,7 +11,8 @@
 #define SECS_PER_HOUR ((uint32_t)60 * SECS_PER_MIN)
 #define SECS_PER_DAY ((uint32_t)24 * SECS_PER_HOUR)
 
-volatile uint16_t millis = 0;
+volatile uint32_t millis = 0;
+volatile uint32_t last_activity = 0;
 volatile uint32_t secs = 0;
 
 volatile enum Mode { Display, Sleep, SetTime } mode = Display;
@@ -143,15 +145,14 @@ void setup_buttons() {
   PORTD |= (1 << PD2) | (1 << PD3) | (1 << PD4);
 }
 
-int32_t difference(uint16_t a, uint16_t b) {
+int32_t difference(uint32_t a, uint32_t b) {
   return (a > b) ? a - b : -(b - a);
 }
 
-volatile uint16_t last_interrupt_time = 0;
-bool debounce(uint16_t delay) {
-  bool result = difference(millis, last_interrupt_time) > delay;
+bool debounce(uint32_t delay) {
+  bool result = difference(millis, last_activity) > delay;
   if (result) {
-    last_interrupt_time = millis;
+    last_activity = millis;
   }
   return result;
 }
@@ -166,9 +167,8 @@ ISR(INT0_vect) {
     case SetTime:
       mode = Display;
       break;
-    default:
     case Sleep:
-      // TODO: wake up
+      sleep_disable();
       mode = Display;
       break;
   }
@@ -177,6 +177,7 @@ ISR(INT0_vect) {
 }
 
 ISR(INT1_vect) {
+  if (mode == Sleep) return;
   if (!debounce(250)) return;
 
   if (mode == Display) {
@@ -191,6 +192,7 @@ ISR(INT1_vect) {
 }
 
 ISR(PCINT2_vect) {
+  if (mode == Sleep) return;
   if (!debounce(250)) return;
 
   if (mode == Display) {
@@ -220,6 +222,15 @@ int main() {
 
     display(hours << 6 | mins);
     // display(secs);
+
+    // sleep after 10 seconds of inactivity
+    if (difference(millis, last_activity) >= 10000) {
+      display(0);
+      mode = Sleep;
+      set_sleep_mode(SLEEP_MODE_PWR_SAVE);
+      sleep_enable();
+    }
+
     _delay_ms(250);
   }
 }
