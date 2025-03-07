@@ -6,8 +6,12 @@
 #include <stdint.h>
 #include <util/delay.h>
 
+#define SECS_PER_MIN (uint32_t)60
+#define SECS_PER_HOUR ((uint32_t)60 * SECS_PER_MIN)
+#define SECS_PER_DAY ((uint32_t)24 * SECS_PER_HOUR)
+
 volatile uint16_t millis = 0;
-volatile uint32_t secs = 54420;
+volatile uint32_t secs = 0;
 
 volatile enum Mode { Display, Sleep, SetTime } mode = Display;
 
@@ -17,7 +21,7 @@ volatile enum Intensity {
   Medium,
   High,
   VeryHigh
-} intensity = High;
+} intensity = Medium;
 
 void apply_intensity() {
   const uint8_t mapping[5] = {32, 64, 128, 192, 255};
@@ -116,6 +120,12 @@ void display(uint16_t bits) {
   PORTB |= (extract_bit(bits, 10) << PB0);
 }
 
+void invert_display() {
+  PORTC ^= mask_c;
+  PORTD ^= mask_d;
+  PORTB ^= mask_b;
+}
+
 void setup_buttons() {
   // enable external interrupts INT0 and INT1
   EIMSK |= (1 << INT0) | (1 << INT1);
@@ -133,12 +143,11 @@ void setup_buttons() {
   PORTD |= (1 << PD2) | (1 << PD3) | (1 << PD4);
 }
 
-volatile uint16_t last_interrupt_time = 0;
-
 int32_t difference(uint16_t a, uint16_t b) {
   return (a > b) ? a - b : -(b - a);
 }
 
+volatile uint16_t last_interrupt_time = 0;
 bool debounce(uint16_t delay) {
   bool result = difference(millis, last_interrupt_time) > delay;
   if (result) {
@@ -149,17 +158,50 @@ bool debounce(uint16_t delay) {
 
 ISR(INT0_vect) {
   if (!debounce(250)) return;
-  display(0);
+
+  switch (mode) {
+    case Display:
+      mode = SetTime;
+      break;
+    case SetTime:
+      mode = Display;
+      break;
+    default:
+    case Sleep:
+      // TODO: wake up
+      mode = Display;
+      break;
+  }
+
+  invert_display();
 }
 
 ISR(INT1_vect) {
   if (!debounce(250)) return;
-  decrease_intensity();
+
+  if (mode == Display) {
+    decrease_intensity();
+    return;
+  }
+
+  secs += SECS_PER_HOUR;
+  if (secs >= SECS_PER_DAY) {
+    secs -= SECS_PER_DAY;
+  }
 }
 
 ISR(PCINT2_vect) {
   if (!debounce(250)) return;
-  increase_intensity();
+
+  if (mode == Display) {
+    increase_intensity();
+    return;
+  }
+
+  secs += SECS_PER_MIN;
+  if (secs % SECS_PER_HOUR == 0) {
+    secs -= SECS_PER_HOUR;
+  }
 }
 
 int main() {
@@ -171,15 +213,13 @@ int main() {
   sei();
 
   while (true) {
-    const uint32_t secs_per_hour = 60 * 60;
-    const uint32_t secs_per_min = 60;
-
-    // hours in the lower 5 bits
-    const uint8_t hours = secs / secs_per_hour;
+    // hours in the upper 5 bits
+    const uint16_t hours = secs / SECS_PER_HOUR;
     // minutes in the lower 6 bits
-    const uint8_t mins = (secs % secs_per_hour) / secs_per_min;
+    const uint16_t mins = (secs % SECS_PER_HOUR) / SECS_PER_MIN;
 
     display(hours << 6 | mins);
-    _delay_ms(1000);
+    // display(secs);
+    _delay_ms(250);
   }
 }
