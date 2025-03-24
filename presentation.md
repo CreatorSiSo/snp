@@ -22,7 +22,7 @@ Button Interrupts
 
 ## PCINT20
 
-- Sleep: ---
+- Sleep: Measure
 - Display: Helligkeit erhöhen
 - SetTime: Minuten +1
 
@@ -43,6 +43,84 @@ PCMSK2 |= (1<<PCINT20);
 
 // enable internal pullup resistors
 PORTD |= (1<<PD2) | (1<<PD3) | (1<<PD4);
+```
+
+<!-- end_slide -->
+
+INT0
+---
+
+```c
+ISR(INT0_vect) {
+    if (!debounce(250)) return;
+
+    switch (mode) {
+        case Display:
+            mode = SetTime;
+            invert_display();
+            break;
+        case SetTime:
+            mode = Display;
+            invert_display();
+            break;
+        case Measure:
+            mode = Display;
+            break;
+        case Sleep:
+            sleep_disable();
+            mode = Display;
+            break;
+    }
+}
+```
+
+<!-- end_slide -->
+
+INT1
+---
+
+```c
+ISR(INT1_vect) {
+    if (mode == Sleep) {
+        sleep_disable();
+        apply_intensity(255);
+        mode = Measure;
+        return;
+    }
+    if (!debounce(250)) return;
+
+    if (mode == Display) {
+        decrease_intensity();
+        return;
+    }
+
+    secs += SECS_PER_HOUR;
+    if (secs >= SECS_PER_DAY) {
+        secs -= SECS_PER_DAY;
+    }
+}
+```
+
+<!-- end_slide -->
+
+PCINT20
+---
+
+```c
+ISR(PCINT2_vect) {
+    if (mode == Sleep) return;
+    if (!debounce(250)) return;
+
+    if (mode == Display) {
+        increase_intensity();
+        return;
+    }
+
+    secs += SECS_PER_MIN;
+    if (secs % SECS_PER_HOUR == 0) {
+        secs -= SECS_PER_HOUR;
+    }
+}
 ```
 
 <!-- end_slide -->

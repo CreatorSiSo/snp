@@ -160,24 +160,22 @@ bool debounce(uint32_t delay) {
 ISR(INT0_vect) {
     if (!debounce(250)) return;
 
-    if (mode == Display) {
-        mode = SetTime;
-        invert_display();
-        return;
-    }
-    if (mode == SetTime) {
-        mode = Display;
-        invert_display();
-        return;
-    }
-    if (mode == Measure) {
-        mode = Display;
-        return;
-    }
-    if (mode == Sleep) {
-        sleep_disable();
-        mode = Display;
-        return;
+    switch (mode) {
+        case Display:
+            mode = SetTime;
+            invert_display();
+            break;
+        case SetTime:
+            mode = Display;
+            invert_display();
+            break;
+        case Measure:
+            mode = Display;
+            break;
+        case Sleep:
+            sleep_disable();
+            mode = Display;
+            break;
     }
 }
 
