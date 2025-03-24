@@ -1,2 +1,5 @@
 default/*
 !default/Makefile
+*.o
+*.hex
+*.elf
