@@ -79,6 +79,14 @@ void setup_timer1_pwm() {
     DDRB |= (1 << PB1) | (1 << PB2);
 }
 
+void disable_timer1_pwm() {
+    TCCR1A |= (0 << WGM10);
+    TCCR1B |= (0 << WGM12);
+    TCCR1A |= (0 << COM1A1) | (1 << COM1B1);
+    TCCR1B |= 0 << CS11;
+    PORTB |= (1 << PB1) | (1 << PB2);
+}
+
 void setup_timer2_secs() {
     // prescaler 128
     TCCR2B |= (1 << CS22) | (1 << CS20);
@@ -170,6 +178,7 @@ ISR(INT0_vect) {
             invert_display();
             break;
         case Measure:
+            setup_timer1_pwm();
             mode = Display;
             break;
         case Sleep:
@@ -182,7 +191,7 @@ ISR(INT0_vect) {
 ISR(INT1_vect) {
     if (mode == Sleep) {
         sleep_disable();
-        apply_intensity(255);
+        disable_timer1_pwm();
         mode = Measure;
         return;
     }
