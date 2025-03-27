@@ -50,6 +50,25 @@ void decrease_intensity() {
     apply_intensity(intensity);
 }
 
+void disable_components() {
+    // disable Analog Digital Converter
+    ADCSRA &= ~(1 << ADEN);
+    // shut down Analog Digital Converter
+    PRR |= (1 << PRADC);
+
+    // disable Analog Comparator
+    ACSR |= (1 << ACD);
+
+    // shut down Two Wire Interface
+    PRR |= (1 << PRTWI);
+
+    // shut down Serial Peripheral Interface
+    PRR |= (1 << PRSPI);
+
+    // shut down Usart
+    PRR |= (1 << PRUSART0);
+}
+
 void setup_timer0_millis() {
     // prescaler 8
     TCCR0B |= (1 << CS01);
@@ -77,14 +96,6 @@ void setup_timer1_pwm() {
 
     // set OC1A, OC1B writeable
     DDRB |= (1 << PB1) | (1 << PB2);
-}
-
-void disable_timer1_pwm() {
-    TCCR1A |= (0 << WGM10);
-    TCCR1B |= (0 << WGM12);
-    TCCR1A |= (0 << COM1A1) | (1 << COM1B1);
-    TCCR1B |= 0 << CS11;
-    PORTB |= (1 << PB1) | (1 << PB2);
 }
 
 void setup_timer2_secs() {
@@ -130,10 +141,10 @@ const uint8_t mask_d = (1 << PD0) | (1 << PD1) | (1 << PD6) | (1 << PD7);
 const uint8_t mask_b = (1 << PB0);
 
 void setup_leds() {
-    apply_intensity(128);
     DDRC |= mask_c;
     DDRD |= mask_d;
     DDRB |= mask_b;
+    apply_intensity();
 }
 
 uint16_t extract_bit(uint16_t bits, uint8_t index) {
@@ -238,6 +249,7 @@ ISR(PCINT2_vect) {
 }
 
 int main() {
+    disable_components();
     setup_timer0_millis();
     setup_timer1_pwm();
     setup_timer2_secs();
@@ -266,7 +278,5 @@ int main() {
         const uint16_t mins = (secs % SECS_PER_HOUR) / SECS_PER_MIN;
 
         display(hours << 6 | mins);
-
-        _delay_ms(250);
     }
 }
