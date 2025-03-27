@@ -15,7 +15,7 @@ volatile uint32_t millis = 0;
 volatile uint32_t last_activity = 0;
 volatile uint32_t secs = 0;
 
-volatile enum Mode { Display, Sleep, SetTime, Measure } mode = Display;
+volatile enum Mode { Display, Sleep, SetTime } mode = Display;
 
 volatile enum Intensity {
     VeryLow,
@@ -97,9 +97,20 @@ void setup_timer2_secs() {
     // Run interrupt on Counter2 overflow
     TIMSK2 |= (1 << TOIE2);
     TIFR2 |= (1 << TOV2);
+
+    // measure output pin
+    DDRD |= (1 << PD5);
 }
 
-ISR(TIMER2_OVF_vect) { secs += 1; }
+ISR(TIMER2_OVF_vect) {
+    secs += 1;
+    if (secs % 2 == 0) {
+        PORTD |= (1 << PD5);
+    } else {
+        PORTD &= ~(1 << PD5);
+    }
+
+}
 
 const uint8_t mask_c =
     (1 << PC0) | (1 << PC1) | (1 << PC2) | (1 << PC3) | (1 << PC4) | (1 << PC5);
@@ -177,10 +188,6 @@ ISR(INT0_vect) {
             mode = Display;
             invert_display();
             break;
-        case Measure:
-            setup_timer1_pwm();
-            mode = Display;
-            break;
         case Sleep:
             sleep_disable();
             mode = Display;
@@ -189,12 +196,7 @@ ISR(INT0_vect) {
 }
 
 ISR(INT1_vect) {
-    if (mode == Sleep) {
-        sleep_disable();
-        disable_timer1_pwm();
-        mode = Measure;
-        return;
-    }
+    if (mode == Sleep) return;
     if (!debounce(250)) return;
 
     if (mode == Display) {
@@ -235,14 +237,7 @@ int main() {
     while (true) {
         if (mode == Sleep) {
             sleep_enable();
-            continue;
-        }
-
-        if (mode == Measure) {
-            if (secs % 2 == 0)
-                display(0b11111111111);
-            else
-                display(0);
+            sleep_cpu();
             continue;
         }
 
