@@ -5,7 +5,6 @@
 #include <avr/sleep.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <util/delay.h>
 
 #define MEASURE
 
@@ -84,7 +83,7 @@ void setup_timer2_secs() {
 
 volatile uint16_t drift = 0;
 // NUM_PERIODS = 1 / (2s - T)
-#define NUM_PERIODS 44944
+#define NUM_PERIODS 22472
 
 ISR(TIMER2_OVF_vect) {
     secs += 1;

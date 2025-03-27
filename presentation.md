@@ -3,30 +3,31 @@ title: Systemnahe Programmierung Binäruhr
 author: Nika Sommer
 ---
 
-Button Interrupts
+Funktionen
 ---
 
-<!-- column_layout: [1, 1] -->
+# Zeit einstellen
 
-<!-- column: 0 -->
+- Mode switch button drücken
+- Stunden und Minuten mit beiden anderen einstellen
 
-## INT0
+# Dimmen
 
-- Mode Select & Wakeup
+- Mode switch button drücken
+- dimmer mit beiden anderen buttons
 
-## INT1
+# Sleep Mode
 
-- Sleep: ---
-- Display: Helligkeit verringern
-- SetTime: Stunden +1
+- 10 Sekunden warten
 
-## PCINT20
+# Uhrzeit läuft weiter
 
-- Sleep: Measure
-- Display: Helligkeit erhöhen
-- SetTime: Minuten +1
+- nach ca. 1 Minute wieder aufwachen lassen
 
-<!-- column: 1 -->
+<!-- end_slide -->
+
+Button Interrupts
+---
 
 ```c
 // enable external interrupts INT0 and INT1
@@ -50,6 +51,15 @@ PORTD |= (1<<PD2) | (1<<PD3) | (1<<PD4);
 INT0
 ---
 
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+- Mode Select & Wakeup
+
+<!-- column: 1 -->
+
+
 ```c
 ISR(INT0_vect) {
     if (!debounce(250)) return;
@@ -62,9 +72,6 @@ ISR(INT0_vect) {
         case SetTime:
             mode = Display;
             invert_display();
-            break;
-        case Measure:
-            mode = Display;
             break;
         case Sleep:
             sleep_disable();
@@ -79,14 +86,19 @@ ISR(INT0_vect) {
 INT1
 ---
 
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+- Sleep: ---
+- Display: Helligkeit verringern
+- SetTime: Stunden +1
+
+<!-- column: 1 -->
+
 ```c
 ISR(INT1_vect) {
-    if (mode == Sleep) {
-        sleep_disable();
-        apply_intensity(255);
-        mode = Measure;
-        return;
-    }
+    if (mode == Sleep) return;
     if (!debounce(250)) return;
 
     if (mode == Display) {
@@ -105,6 +117,16 @@ ISR(INT1_vect) {
 
 PCINT20
 ---
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+- Sleep: ---
+- Display: Helligkeit erhöhen
+- SetTime: Minuten +1
+
+<!-- column: 1 -->
 
 ```c
 ISR(PCINT2_vect) {
@@ -154,7 +176,7 @@ void setup_timer0_millis() {
     // prescaler 8
     TCCR0B |= (1 << CS01);
 
-    // enable CTC
+    // enable ctc
     TCCR0A |= (1 << WGM01);
 
     // enable Timer0 compare interrupt A
@@ -195,18 +217,20 @@ void setup_timer1_pwm() {
 
 ```c
 volatile enum Intensity {
-    VeryLow,
-    Low,
-    Medium,
-    High,
-    VeryHigh,
+    VeryLow = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    VeryHigh = 5,
 } intensity = Medium;
 
-void apply_intensity() {
-    const uint8_t mapping[5] =
-        {32, 64, 128, 192, 255};
-    uint8_t inverted =
-        255 - mapping[(uint8_t)intensity];
+void apply_intensity(
+    enum Intensity intensity
+) {
+    const uint8_t mapping[5]
+        = {32, 64, 128, 192, 255};
+    uint8_t inverted
+        = 255 - mapping[(uint8_t)intensity];
     OCR1A = inverted;
     OCR1B = inverted;
 }
@@ -247,6 +271,9 @@ void setup_timer2_secs() {
     // Run interrupt on Counter2 overflow
     TIMSK2 |= (1 << TOIE2);
     TIFR2 |= (1 << TOV2);
+
+    // measure output pin
+    DDRD |= (1 << PD5);
 }
 ```
 
@@ -255,19 +282,42 @@ void setup_timer2_secs() {
 Genauigkeitsmessung
 ---
 
+```
+Periode = 1.9999555s
+
+N_Perioden = 1 / (2s - 1.9999555s)
+           = 22471.91011236
+           = 22472
+```
+
 <!-- end_slide -->
 
 Sleep Mode
 ---
 
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
 # Display
 
-3mA - 20mA
+1.8mA - 22mA
 
 # Sleep (Power Save)
 
-0.6mA
+0.95µA
 
 # Laufzeit
 
-230mAh / 0.6mA = 383h = 16days
+230mAh / 0.95µA = 242105.2h = 27.6years
+
+<!-- column: 1 -->
+
+- https://godbolt.org/z/EbE185oYa
+
+----
+
+- ca. 30 instructions im hot path
+- Atmega48a hat 1MIPS pro MHz
+- ISR Timer2 braucht ca. (30 / 1000000)s = 0.0003s
+- hat kaum Einfluss auf den Stromverbrauch
