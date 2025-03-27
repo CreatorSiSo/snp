@@ -102,6 +102,13 @@ void setup_timer2_secs() {
     DDRD |= (1 << PD5);
 }
 
+volatile uint16_t drift = 0;
+// NUM_PERIODS = 1 / abs(T - 1)
+#define NUM_PERIODS 44944
+// T > 1 => true
+// T < 1 => false
+#define CORRECTION_ADD false
+
 ISR(TIMER2_OVF_vect) {
     secs += 1;
     if (secs % 2 == 0) {
@@ -110,6 +117,11 @@ ISR(TIMER2_OVF_vect) {
         PORTD &= ~(1 << PD5);
     }
 
+    drift += 1;
+    if (drift == NUM_PERIODS) {
+        secs = (CORRECTION_ADD) ? secs + 1 : secs - 1;
+        drift = 0;
+    }
 }
 
 const uint8_t mask_c =
