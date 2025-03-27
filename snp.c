@@ -7,48 +7,17 @@
 #include <stdint.h>
 #include <util/delay.h>
 
+#define MEASURE
+
 #define SECS_PER_MIN (uint32_t)60
 #define SECS_PER_HOUR ((uint32_t)60 * SECS_PER_MIN)
 #define SECS_PER_DAY ((uint32_t)24 * SECS_PER_HOUR)
 
+volatile uint32_t secs = 12 * SECS_PER_HOUR;
 volatile uint32_t millis = 0;
 volatile uint32_t last_activity = 0;
-volatile uint32_t secs = 0;
 
 volatile enum Mode { Display, Sleep, SetTime } mode = Display;
-
-volatile enum Intensity {
-    VeryLow,
-    Low,
-    Medium,
-    High,
-    VeryHigh,
-} intensity = Medium;
-
-void apply_intensity() {
-    const uint8_t mapping[5] = {32, 64, 128, 192, 255};
-    uint8_t inverted = 255 - mapping[(uint8_t)intensity];
-    OCR1A = inverted;
-    OCR1B = inverted;
-}
-
-void increase_intensity() {
-    if (intensity == VeryHigh) {
-        intensity = VeryLow;
-    } else {
-        intensity += 1;
-    }
-    apply_intensity(intensity);
-}
-
-void decrease_intensity() {
-    if (intensity == VeryLow) {
-        intensity = VeryHigh;
-    } else {
-        intensity -= 1;
-    }
-    apply_intensity(intensity);
-}
 
 void disable_components() {
     // disable Analog Digital Converter
@@ -114,25 +83,57 @@ void setup_timer2_secs() {
 }
 
 volatile uint16_t drift = 0;
-// NUM_PERIODS = 1 / abs(T - 1)
+// NUM_PERIODS = 1 / (2s - T)
 #define NUM_PERIODS 44944
-// T > 1 => true
-// T < 1 => false
-#define CORRECTION_ADD false
 
 ISR(TIMER2_OVF_vect) {
     secs += 1;
+
+#ifdef MEASURE
     if (secs % 2 == 0) {
         PORTD |= (1 << PD5);
     } else {
         PORTD &= ~(1 << PD5);
     }
+#endif
 
     drift += 1;
     if (drift == NUM_PERIODS) {
-        secs = (CORRECTION_ADD) ? secs + 1 : secs - 1;
+        // quartz is always a bit faster than the expected frequency
+        secs -= 1;
         drift = 0;
     }
+}
+
+volatile enum Intensity {
+    VeryLow = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    VeryHigh = 5,
+} intensity = Medium;
+
+void apply_intensity(enum Intensity intensity) {
+    const uint8_t mapping[5] = {32, 64, 128, 192, 255};
+    uint8_t inverted = 255 - mapping[(uint8_t)intensity];
+    OCR1A = inverted;
+    OCR1B = inverted;
+}
+
+void increase_intensity() {
+    intensity += 1;
+    if (intensity > VeryHigh) {
+        intensity = VeryLow;
+    }
+    apply_intensity(intensity);
+}
+
+void decrease_intensity() {
+    intensity -= 1;
+    if (intensity > VeryHigh) {
+        intensity = VeryHigh;
+    }
+    apply_intensity(intensity);
 }
 
 const uint8_t mask_c =
@@ -144,7 +145,7 @@ void setup_leds() {
     DDRC |= mask_c;
     DDRD |= mask_d;
     DDRB |= mask_b;
-    apply_intensity();
+    apply_intensity(intensity);
 }
 
 uint16_t extract_bit(uint16_t bits, uint8_t index) {
